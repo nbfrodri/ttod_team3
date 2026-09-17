@@ -78,7 +78,8 @@ suite, is listed in [`AGENTS.md`](AGENTS.md).
 ## Development Team
 
 **Rubén Vega Balbás, PhD. <ruben.vega@udit.es>**:  Product owner, product manager
-
+**Rodrigo García Sánchez <rodrigo.garcia.sanchez@alumnos.udit.es>**: Developer, Oracle Terminal
+**Àvila Rodriguez Andrea <andrea.avila@alumnos.udit.es>**: Developer, Oracle Terminal
 
 ## License
 
