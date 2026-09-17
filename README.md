@@ -74,11 +74,12 @@ When `docs/public` changes, also run the publication privacy watcher over that t
 rendered output after a Jekyll build). The full agent verification set, including the ttod-bridge
 suite, is listed in [`AGENTS.md`](AGENTS.md).
 
-
 ## Development Team
 
 **Rubén Vega Balbás, PhD. <ruben.vega@udit.es>**:  Product owner, product manager
+
 **Gonzalo Sanchez Alvarez** <gonzalo.sanchez@alum.udit.es>**: TEAM 1
+
 **Gabriel Calvo Ballesteros** <gabriel.calvo@alumnos.udit.es>** TEAM 1
 
 **Rodrigo García Sánchez <rodrigo.garcia.sanchez@alumnos.udit.es>**: Developer, Oracle Terminal
@@ -86,6 +87,8 @@ suite, is listed in [`AGENTS.md`](AGENTS.md).
 **Àvila Rodriguez Andrea <andrea.avila@alumnos.udit.es>**: Developer, Oracle Terminal
 
 **Pablo Novoa Rodríguez. <pvrnovoa@gmail.com>**: Developer PWA-Local-Operations
+
+**Gonzalo Pérez Fernández-Corugedo. <gpfc25@gmail.com>**: Knowledge Graph Developer
 
 ## License
 
