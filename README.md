@@ -78,8 +78,14 @@ suite, is listed in [`AGENTS.md`](AGENTS.md).
 ## Development Team
 
 **Rubén Vega Balbás, PhD. <ruben.vega@udit.es>**:  Product owner, product manager
+**Gonzalo Sanchez Alvarez** <gonzalo.sanchez@alum.udit.es>**: TEAM 1
+**Gabriel Calvo Ballesteros** <gabriel.calvo@alumnos.udit.es>** TEAM 1
+
 **Rodrigo García Sánchez <rodrigo.garcia.sanchez@alumnos.udit.es>**: Developer, Oracle Terminal
+
 **Àvila Rodriguez Andrea <andrea.avila@alumnos.udit.es>**: Developer, Oracle Terminal
+
+**Pablo Novoa Rodríguez. <pvrnovoa@gmail.com>**: Developer PWA-Local-Operations
 
 ## License
 
