@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -77,7 +77,7 @@ describe('OracleTerminal governance and URL context', () => {
     fireEvent.change(screen.getByPlaceholderText(/practice question/), { target: { value: 'A grounded question' } });
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
     expect(await screen.findByText('Grounded in the TTOD corpus')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'wis-001' })).toHaveAttribute('href', '/en/wisdom/wis-001');
+    expect(screen.getByRole('link', { name: 'View quote wis-001' })).toHaveAttribute('href', '/en/wisdom/wis-001');
     expect(screen.queryByRole('button', { name: /draft proposal/ })).not.toBeInTheDocument();
   });
 
@@ -168,5 +168,30 @@ describe('OracleTerminal live-region announcement (Task 2)', () => {
     controller.close();
     await waitFor(() => expect(answer).toHaveAttribute('aria-busy', 'false'));
     expect(liveRegions()).toHaveLength(1);
+  });
+});
+
+describe('OracleTerminal grounded vs. creative disclosure (Task 3)', () => {
+  afterEach(() => cleanup());
+  beforeEach(() => vi.clearAllMocks());
+
+  it('names each segment by its mode in text and links grounded citations to their quote pages', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([
+      { mode: 'grounded', citedQuoteIds: ['wis-001', 'arch-038'], text: 'From the corpus.' },
+      { mode: 'creative', citedQuoteIds: ['wis-999'], text: 'From the oracle.' },
+    ])));
+    render(<OracleTerminal locale="es" />);
+    fireEvent.change(screen.getByPlaceholderText(/pregunta de práctica/), { target: { value: 'Mixed answer' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Preguntar' }));
+
+    const grounded = await screen.findByRole('group', { name: 'Fundamentado en el corpus TTOD' });
+    const creative = screen.getByRole('group', { name: 'Voz oracular — sin coincidencia fuerte en TTOD' });
+    expect(grounded).toHaveTextContent('From the corpus.');
+    expect(creative).toHaveTextContent('From the oracle.');
+
+    const citations = within(grounded).getByRole('list', { name: 'Citas' });
+    expect(within(citations).getByRole('link', { name: 'Ver cita wis-001' })).toHaveAttribute('href', '/es/wisdom/wis-001');
+    expect(within(citations).getByRole('link', { name: 'Ver cita arch-038' })).toHaveAttribute('href', '/es/wisdom/arch-038');
+    expect(within(creative).queryByRole('link')).not.toBeInTheDocument();
   });
 });
