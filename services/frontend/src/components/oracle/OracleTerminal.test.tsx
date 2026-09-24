@@ -91,4 +91,24 @@ describe('OracleTerminal governance and URL context', () => {
       query: 'Queue this', contextTag: 'simplicity', sessionHistory: [], locale: 'en',
     }));
   });
+
+  it('keeps previous exchanges and sends them as sessionHistory', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(sseResponse([{ mode: 'creative', text: 'Diversify your portfolio to reduce risk.' }]))
+      .mockResolvedValueOnce(sseResponse([{ mode: 'creative', text: 'Build an emergency fund before investing.' }]));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OracleTerminal locale="en" />);
+
+    fireEvent.change(screen.getByPlaceholderText(/practice question/), { target: { value: 'How should I invest my savings?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    expect(await screen.findByText('Diversify your portfolio to reduce risk.')).toBeVisible();
+
+    fireEvent.change(screen.getByPlaceholderText(/practice question/), { target: { value: 'What should I do before investing?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    expect(await screen.findByText('Build an emergency fund before investing.')).toBeVisible();
+    expect(screen.getByText('Diversify your portfolio to reduce risk.')).toBeVisible();
+
+    const secondBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(secondBody.sessionHistory).toEqual(['Human: How should I invest my savings?', 'Oracle: Diversify your portfolio to reduce risk.']);
+  });
 });
