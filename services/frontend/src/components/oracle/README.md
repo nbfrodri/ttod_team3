@@ -88,3 +88,31 @@ the query or "Listening…" are repeated, and whether the full answer is read ag
 the single live region grows chunk by chunk, holds neither the query nor the status, and switches
 `aria-busy` from `true` to `false` when the stream closes. It also checks that each chunk is its own
 `<span>`.
+
+# Grounded vs. creative disclosure (Team 3, Task 3)
+
+Brief: [`docs/public/_tasks/oracle-task3.md`](../../../../../docs/public/_tasks/oracle-task3.md).
+
+Two small sub-components live next to `OracleTerminal` in `OracleTerminal.tsx`:
+
+- **`ModeLabel`** renders the mode as text ("Grounded in the TTOD corpus" / "Oracular voice — no
+  strong TTOD match", localized) plus a glyph that differs in shape: `◆` grounded, `✦` creative.
+  The glyph is `aria-hidden`, so screen readers hear only the words. Background and border colors
+  are an extra cue, never the only one.
+- **`CitationLinks`** renders `citedQuoteIds` as a list named "Cited quotes" / "Citas". Each id is
+  a link to the real quote page `/{locale}/wisdom/{id}` (`pages/[locale]/wisdom/[slug].astro` looks
+  the quote up by `id`) with `aria-label="View quote {id}"`. Only grounded segments show citations.
+
+Each segment is a `role="group"` with `aria-labelledby` pointing at its `ModeLabel`, so a screen
+reader moving through the answer hears which mode a paragraph belongs to. Because the label sits
+inside the Task 2 live region, the mode is also announced when a segment starts streaming.
+Accessibility follows the project's global Definition of Done.
+
+**Manual check (step 5 of the brief):** in Chromium DevTools → Rendering → *Emulate vision
+deficiencies* (achromatopsia, deuteranopia) the two modes must still differ by label and glyph.
+Then do the screen reader check described in the Task 2 section.
+
+**Test:** *grounded vs. creative disclosure (Task 3)* streams one grounded and one creative
+segment and asserts by role and accessible name, not class names: each group is named by its
+mode, the grounded group has a "Citas" list whose links point to `/es/wisdom/{id}`, and the
+creative group has no links.
