@@ -67,6 +67,7 @@ const COPY = {
     proposed: 'Saved as a draft proposal. The current human acceptance path is not yet operational.',
     proposalError: 'The draft proposal could not be saved.', retryError: 'A queued query could not be retried yet.',
     context: 'Context tag', hint: 'Alt+Shift+O opens · Ctrl/⌘+Enter asks · Esc closes',
+    citations: 'Cited quotes', viewQuote: 'View quote',
   },
   es: {
     eyebrow: 'Oráculo local', title: 'Pregunta al Tao', open: 'Abrir oráculo', close: 'Cerrar oráculo',
@@ -79,8 +80,34 @@ const COPY = {
     proposed: 'Guardada como borrador de propuesta. La vía actual de aceptación humana aún no está operativa.',
     proposalError: 'No se pudo guardar el borrador.', retryError: 'Todavía no se pudo reintentar una consulta guardada.',
     context: 'Etiqueta de contexto', hint: 'Alt+Mayús+O abre · Ctrl/⌘+Intro pregunta · Esc cierra',
+    citations: 'Citas', viewQuote: 'Ver cita',
   },
 } as const;
+
+type Copy = (typeof COPY)[Locale];
+
+// Task 3: the mode is disclosed by text plus a distinct glyph, never by color alone. The glyph is
+// aria-hidden so screen readers hear only the label, which also names the segment (aria-labelledby).
+const MODE_GLYPH = { grounded: '◆', creative: '✦' } as const;
+
+function ModeLabel({ id, mode, copy }: { id: string; mode: OracleResponseChunk['mode']; copy: Copy }) {
+  return (
+    <strong id={id} className="oracle-mode">
+      <span aria-hidden="true">{MODE_GLYPH[mode]} </span>
+      {mode === 'grounded' ? copy.grounded : copy.creative}
+    </strong>
+  );
+}
+
+function CitationLinks({ ids, locale, copy }: { ids: string[]; locale: Locale; copy: Copy }) {
+  return (
+    <ul className="oracle-citations" aria-label={copy.citations}>
+      {ids.map((id) => (
+        <li key={id}><a href={`/${locale}/wisdom/${id}`} aria-label={`${copy.viewQuote} ${id}`}>{id}</a></li>
+      ))}
+    </ul>
+  );
+}
 
 const identifier = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 
@@ -288,8 +315,11 @@ export default function OracleTerminal({ locale }: Props) {
                       aria-busy={exchange.state === 'streaming'}
                     >
                     {exchange.segments.map((segment) => (
-                      <div key={segment.key} className={`oracle-segment oracle-${segment.mode}`}>
-                        <strong className="oracle-mode">{segment.mode === 'grounded' ? copy.grounded : copy.creative}</strong>
+                      <div
+                        key={segment.key} className={`oracle-segment oracle-${segment.mode}`}
+                        role="group" aria-labelledby={`oracle-mode-${segment.key}`}
+                      >
+                        <ModeLabel id={`oracle-mode-${segment.key}`} mode={segment.mode} copy={copy} />
                         {(segment.themes?.length || segment.tags?.length) ? (
                           <p className="oracle-anchors">
                             {segment.themes?.length ? (
@@ -302,9 +332,7 @@ export default function OracleTerminal({ locale }: Props) {
                         ) : null}
                         <p>{segment.parts.map((part, index) => <span key={index}>{part}</span>)}</p>
                         {segment.mode === 'grounded' && segment.citedQuoteIds?.length ? (
-                          <ul className="oracle-citations" aria-label={copy.grounded}>
-                            {segment.citedQuoteIds.map((id) => <li key={id}><a href={`/${locale}/wisdom/${id}`}>{id}</a></li>)}
-                          </ul>
+                          <CitationLinks ids={segment.citedQuoteIds} locale={locale} copy={copy} />
                         ) : null}
                       </div>
                     ))}
