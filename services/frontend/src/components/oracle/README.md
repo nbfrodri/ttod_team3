@@ -140,3 +140,32 @@ switched off under `prefers-reduced-motion`; the text stays.
 **Tests:** *cold-start preparing state (Task 5)* covers the open stream with no chunk yet
 (`role="status"`, Ask disabled), a `fetch` that rejects, and the already-offline case, where the
 label is checked synchronously after the click and `fetch` is never called.
+
+# Recovery/error state (Team 3, Task 6)
+
+Brief: [`docs/public/_tasks/oracle-task6.md`](../../../../../docs/public/_tasks/oracle-task6.md).
+
+Three situations look alike in the code and are deliberately **not** handled the same way:
+
+| Situation | What the code sees | What the user gets |
+| --- | --- | --- |
+| Cold start, model still loading | request open, no chunk yet | the Task 5 `preparing` status ("Gathering wisdom…"), `role="status"` |
+| The connection is gone | `fetch` rejects with a `TypeError` | the offline queue: the query is stored and replayed on `online` ("safely queued on this device") |
+| The server answered 5xx | status ≥ 500 → `UnreachableOracleError` | `role="alert"` **plus a Retry button**, and the query is *not* queued |
+| Any other rejected status (4xx) or a broken stream | any other `Error` | the same alert and Retry, with a generic message |
+
+**Why the queue keeps the `TypeError` case:** a lost connection is not a broken Oracle. The query
+survives and the reconnect flush replays it in order, so a Retry button there would only fail
+again. Parking a **5xx** in that queue would be the opposite mistake: the server did answer, so
+nothing was lost to the network, and hiding it would hide a real outage.
+
+**No raw errors:** `error.message` — which contains the status code — goes to
+`enqueueErrorReport` for diagnostics and never into the DOM; the UI only shows the localized
+notices above. `Retry` re-runs the *same* exchange rather than appending a second card, so the
+state machine stays `preparing → streaming → complete | error`, one card per question, and it
+never leaves a stale alert sitting next to its own replacement.
+
+**Test:** *recovery/error state (Task 6)* covers a queued entry whose retry fails (`TypeError` →
+alert + Retry) and a 5xx answered by a live server (the "Unavailable" alert, no raw status code,
+nothing queued), plus a recovery test where Retry streams normally.
+
