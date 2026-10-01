@@ -29,6 +29,7 @@ interface Exchange {
   state: 'preparing' | 'streaming' | 'complete' | 'queued' | 'error';
   notice?: string;
   proposalState?: 'saving' | 'saved' | 'error';
+  payload: OracleQueryPayload;
 }
 
 interface Props {
@@ -64,9 +65,12 @@ const COPY = {
     themes: 'Thematic anchors', tags: 'Nearby tags',
     queued: 'The oracle is unreachable. Your query is safely queued on this device.',
     queueError: 'The oracle is unreachable and this browser could not open its offline queue.',
+    unavailable: 'The Oracle is currently unavailable. Please try again.',
+    answerFailed: 'The Oracle could not complete this answer. Please try again.',
     syncing: 'Retrying queued queries…', propose: 'Save as a draft proposal', proposing: 'Saving draft…',
     proposed: 'Saved as a draft proposal. The current human acceptance path is not yet operational.',
     proposalError: 'The draft proposal could not be saved.', retryError: 'A queued query could not be retried yet.',
+    retry: 'Retry',
     context: 'Context tag', hint: 'Alt+Shift+O opens · Ctrl/⌘+Enter asks · Esc closes',
     citations: 'Cited quotes', viewQuote: 'View quote',
   },
@@ -78,9 +82,12 @@ const COPY = {
     themes: 'Anclas temáticas', tags: 'Etiquetas cercanas',
     queued: 'El oráculo no está disponible. Tu consulta queda guardada en este dispositivo.',
     queueError: 'El oráculo no está disponible y el navegador no pudo abrir la cola sin conexión.',
+    unavailable: 'El Oráculo no está disponible en este momento. Inténtalo de nuevo.',
+    answerFailed: 'El Oráculo no pudo completar esta respuesta. Inténtalo de nuevo.',
     syncing: 'Reintentando consultas guardadas…', propose: 'Guardar como borrador de propuesta', proposing: 'Guardando borrador…',
     proposed: 'Guardada como borrador de propuesta. La vía actual de aceptación humana aún no está operativa.',
     proposalError: 'No se pudo guardar el borrador.', retryError: 'Todavía no se pudo reintentar una consulta guardada.',
+    retry: 'Reintentar',
     context: 'Etiqueta de contexto', hint: 'Alt+Mayús+O abre · Ctrl/⌘+Intro pregunta · Esc cierra',
     citations: 'Citas', viewQuote: 'Ver cita',
   },
@@ -148,13 +155,26 @@ export default function OracleTerminal({ locale }: Props) {
     setExchanges((current) => current.map((exchange) => exchange.id === id ? update(exchange) : exchange));
   }, []);
 
-  const sendPayload = useCallback(async (payload: OracleQueryPayload, queuedEntry?: OfflineLogEntry) => {
-    const id = identifier();
+  const sendPayload = useCallback(async (
+    payload: OracleQueryPayload,
+    queuedEntry?: OfflineLogEntry,
+    retryOf?: string,
+  ) => {
+    const id = retryOf ?? identifier();
     // `preparing` covers the gap between the request firing and the first chunk arriving
     // (cold start or plain network latency) so the terminal never looks frozen (Task 5).
-    setExchanges((current) => [...current, {
-      id, query: payload.query, contextTag: payload.contextTag, segments: [], state: 'preparing',
-    }]);
+    if (retryOf) {
+      // Task 6: Retry re-runs the *same* exchange, so the failed card does not linger next to its
+      // own replacement with a still-clickable button. The state machine stays idle → preparing →
+      // streaming → complete | error, one card per question.
+      updateExchange(retryOf, (exchange) => ({
+        ...exchange, segments: [], state: 'preparing', notice: undefined, proposalState: undefined,
+      }));
+    } else {
+      setExchanges((current) => [...current, {
+        id, query: payload.query, contextTag: payload.contextTag, segments: [], state: 'preparing', payload,
+      }]);
+    }
     let received = 0;
     try {
       const response = await fetch('/api/v1/oracle/stream', {
@@ -183,8 +203,14 @@ export default function OracleTerminal({ locale }: Props) {
       if (queuedEntry) await markEntrySynced(queuedEntry);
       return true;
     } catch (error) {
-      const unreachable = error instanceof UnreachableOracleError || error instanceof TypeError;
-      if (received === 0 && !queuedEntry && unreachable) {
+      // Two failures that look similar and are not, so they get different UI (Task 6, brief §3):
+      // - `TypeError` = the connection is gone. The offline queue owns that case (PWA module): the
+      //   query is preserved and replayed on reconnect, so a Retry button would only fail again.
+      // - `UnreachableOracleError` = the server answered 5xx. That is the brief's "actually broken"
+      //   case: an alert plus a manual Retry, and never a query parked in the offline queue.
+      const offline = error instanceof TypeError;
+      const serverBroken = error instanceof UnreachableOracleError;
+      if (received === 0 && !queuedEntry && offline) {
         try {
           await enqueueOracleQuery(payload);
           updateExchange(id, (exchange) => ({ ...exchange, state: 'queued', notice: copy.queued }));
@@ -192,15 +218,16 @@ export default function OracleTerminal({ locale }: Props) {
           updateExchange(id, (exchange) => ({ ...exchange, state: 'error', notice: copy.queueError }));
         }
       } else {
-        const message = error instanceof Error ? error.message : String(error);
-        await enqueueErrorReport(message).catch(() => undefined);
-        updateExchange(id, (exchange) => ({
-          ...exchange, state: 'error', notice: queuedEntry ? copy.retryError : message,
-        }));
+        // The diagnostic detail (status code included) goes to the error report, never to the UI:
+        // the brief's success criterion is that a user never reads an HTTP status or a stack trace.
+        const detail = error instanceof Error ? error.message : String(error);
+        await enqueueErrorReport(detail).catch(() => undefined);
+        const notice = serverBroken ? copy.unavailable : queuedEntry ? copy.retryError : copy.answerFailed;
+        updateExchange(id, (exchange) => ({ ...exchange, state: 'error', notice }));
       }
       return false;
     }
-  }, [copy.queueError, copy.queued, copy.retryError, updateExchange]);
+  }, [copy.answerFailed, copy.queueError, copy.queued, copy.retryError, copy.unavailable, updateExchange]);
 
   const flushQueue = useCallback(async () => {
     if (syncingRef.current || typeof navigator === 'undefined' || !navigator.onLine) return;
@@ -247,6 +274,14 @@ export default function OracleTerminal({ locale }: Props) {
     () => exchanges.some((exchange) => exchange.state === 'preparing' || exchange.state === 'streaming'),
     [exchanges],
   );
+
+  // Task 6: a hard failure (not an offline queue) gets a manual way back in, distinct from the
+  // automatic reconnect flush that already handles the "unreachable" queued case. The retry
+  // re-runs this exchange in place instead of appending a second card for the same question.
+  const retry = (exchange: Exchange) => {
+    if (busy) return;
+    void sendPayload(exchange.payload, undefined, exchange.id);
+  };
 
   const submit = async () => {
     const trimmed = query.trim();
@@ -349,7 +384,16 @@ export default function OracleTerminal({ locale }: Props) {
                         error) has settled the exchange into another state. */}
                     {exchange.state === 'preparing' && <p className="oracle-status oracle-preparing" role="status">{copy.preparing}</p>}
                     {exchange.state === 'streaming' && <p className="oracle-status" role="status">{copy.streaming}</p>}
-                    {exchange.notice && <p className="oracle-notice" role="status">{exchange.notice}</p>}
+                    {/* Task 6: a hard failure is announced assertively and offers a manual way back in;
+                        the offline-queue notice stays `status` since it is not a failure, just a wait. */}
+                    {exchange.notice && (
+                      <p className="oracle-notice" role={exchange.state === 'error' ? 'alert' : 'status'}>{exchange.notice}</p>
+                    )}
+                    {exchange.state === 'error' && (
+                      <button type="button" className="oracle-retry" onClick={() => retry(exchange)} disabled={busy}>
+                        {copy.retry}
+                      </button>
+                    )}
                     {exchange.state === 'complete' && exchange.segments.some((segment) => segment.mode === 'creative') && (
                       <div className="oracle-proposal">
                         <button type="button" onClick={() => void propose(exchange)} disabled={exchange.proposalState === 'saving' || exchange.proposalState === 'saved'}>

@@ -5,11 +5,12 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import OracleTerminal from './OracleTerminal';
+import type { OfflineLogEntry } from '../../types/domain';
 
 const queueMocks = vi.hoisted(() => ({
   enqueueErrorReport: vi.fn(async () => undefined),
   enqueueOracleQuery: vi.fn(async () => undefined),
-  listUnsyncedEntries: vi.fn(async () => []),
+  listUnsyncedEntries: vi.fn(async (): Promise<import('../../types/domain').OfflineLogEntry[]> => []),
   markEntrySynced: vi.fn(async () => undefined),
 }));
 
@@ -253,5 +254,65 @@ describe('OracleTerminal cold-start preparing state (Task 5)', () => {
 
     expect(await screen.findByText(/safely queued on this device/)).toBeVisible();
     expect(screen.queryByText('Gathering wisdom…')).not.toBeInTheDocument();
+  });
+});
+
+describe('OracleTerminal recovery/error state (Task 6)', () => {
+  afterEach(() => cleanup());
+  beforeEach(() => vi.clearAllMocks());
+
+  it('announces a hard failure as an alert with a retry action, and retry resends the query', async () => {
+    queueMocks.listUnsyncedEntries.mockResolvedValueOnce([
+      {
+        id: 'queued-1', timestamp: new Date().toISOString(), kind: 'oracle-query', synced: false,
+        payload: { query: 'Still down?', sessionHistory: [], locale: 'en' },
+      } satisfies OfflineLogEntry,
+    ]);
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError('still down'))
+      .mockResolvedValueOnce(sseResponse([{ mode: 'creative', text: 'Back online.' }]));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OracleTerminal locale="en" />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('A queued query could not be retried yet.');
+    const retryButton = screen.getByRole('button', { name: 'Retry' });
+
+    fireEvent.click(retryButton);
+    expect(await screen.findByText('Back online.')).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ query: 'Still down?' });
+  });
+
+  // Brief §5: "mock `fetch` to return a 5xx error and assert that the 'Unavailable' UI is rendered".
+  it('renders the unavailable state — not the offline queue — when the Oracle answers 5xx', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"detail":"boom"}', { status: 503 })));
+    render(<OracleTerminal locale="en" />);
+    fireEvent.change(screen.getByPlaceholderText(/practice question/), { target: { value: 'Server broken?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('The Oracle is currently unavailable. Please try again.');
+    // No raw status code and no internal error string may reach the user.
+    expect(screen.queryByText(/503/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Oracle stream failed/)).not.toBeInTheDocument();
+    // A 5xx is a live server that answered, so the query must NOT be parked in the offline queue.
+    expect(queueMocks.enqueueOracleQuery).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
+  });
+
+  it('recovers through Retry once the Oracle is back', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('boom', { status: 500 }))
+      .mockResolvedValueOnce(sseResponse([{ mode: 'creative', text: 'Back online.' }]));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OracleTerminal locale="en" />);
+    fireEvent.change(screen.getByPlaceholderText(/practice question/), { target: { value: 'Are you back?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('Back online.')).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
