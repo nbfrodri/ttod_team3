@@ -215,3 +215,43 @@ describe('OracleTerminal grounded vs. creative disclosure (Task 3)', () => {
     expect(within(creative).queryByRole('link')).not.toBeInTheDocument();
   });
 });
+
+describe('OracleTerminal cold-start preparing state (Task 5)', () => {
+  afterEach(() => cleanup());
+  beforeEach(() => vi.clearAllMocks());
+
+  it('shows a preparing status before the first chunk, then switches to streaming', async () => {
+    const encoder = new TextEncoder();
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({ start: (c) => { controller = c; } });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, {
+      status: 200, headers: { 'Content-Type': 'text/event-stream' },
+    })));
+    render(<OracleTerminal locale="en" />);
+    fireEvent.change(screen.getByPlaceholderText(/practice question/), { target: { value: 'Cold start' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+    // Brief §5: the "preparing" element itself must be the live region — asserting the text alone
+    // would still pass if the role went missing. `role="status"` implies aria-live="polite".
+    const preparing = await screen.findByRole('status');
+    expect(preparing).toHaveTextContent('Gathering wisdom…');
+    expect(preparing).toBeVisible();
+    expect(screen.queryByText('Listening…')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeDisabled();
+
+    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ mode: 'creative', text: 'Awake.' })}\n\n`));
+    await waitFor(() => expect(screen.queryByText('Gathering wisdom…')).not.toBeInTheDocument());
+    expect(screen.getByText('Listening…')).toBeVisible();
+    controller.close();
+  });
+
+  it('does not show the preparing status when the request fails immediately', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network unavailable')));
+    render(<OracleTerminal locale="en" />);
+    fireEvent.change(screen.getByPlaceholderText(/practice question/), { target: { value: 'Fails fast' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+    expect(await screen.findByText(/safely queued on this device/)).toBeVisible();
+    expect(screen.queryByText('Gathering wisdom…')).not.toBeInTheDocument();
+  });
+});
