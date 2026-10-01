@@ -26,7 +26,7 @@ interface Exchange {
   query: string;
   contextTag?: string;
   segments: StreamSegment[];
-  state: 'streaming' | 'complete' | 'queued' | 'error';
+  state: 'preparing' | 'streaming' | 'complete' | 'queued' | 'error';
   notice?: string;
   proposalState?: 'saving' | 'saved' | 'error';
 }
@@ -59,6 +59,7 @@ const COPY = {
   en: {
     eyebrow: 'Local oracle', title: 'Ask the Tao', open: 'Open oracle', close: 'Close oracle',
     placeholder: 'Bring a practice question — the Oracle answers with wisdom, not fixes…', submit: 'Ask', streaming: 'Listening…',
+    preparing: 'Gathering wisdom…',
     grounded: 'Grounded in the TTOD corpus', creative: 'Oracular voice — no strong TTOD match',
     themes: 'Thematic anchors', tags: 'Nearby tags',
     queued: 'The oracle is unreachable. Your query is safely queued on this device.',
@@ -72,6 +73,7 @@ const COPY = {
   es: {
     eyebrow: 'Oráculo local', title: 'Pregunta al Tao', open: 'Abrir oráculo', close: 'Cerrar oráculo',
     placeholder: 'Trae una pregunta de práctica — el Oráculo responde con sabiduría, no con parches…', submit: 'Preguntar', streaming: 'Escuchando…',
+    preparing: 'Reuniendo sabiduría…',
     grounded: 'Fundamentado en el corpus TTOD', creative: 'Voz oracular — sin coincidencia fuerte en TTOD',
     themes: 'Anclas temáticas', tags: 'Etiquetas cercanas',
     queued: 'El oráculo no está disponible. Tu consulta queda guardada en este dispositivo.',
@@ -148,8 +150,10 @@ export default function OracleTerminal({ locale }: Props) {
 
   const sendPayload = useCallback(async (payload: OracleQueryPayload, queuedEntry?: OfflineLogEntry) => {
     const id = identifier();
+    // `preparing` covers the gap between the request firing and the first chunk arriving
+    // (cold start or plain network latency) so the terminal never looks frozen (Task 5).
     setExchanges((current) => [...current, {
-      id, query: payload.query, contextTag: payload.contextTag, segments: [], state: 'streaming',
+      id, query: payload.query, contextTag: payload.contextTag, segments: [], state: 'preparing',
     }]);
     let received = 0;
     try {
@@ -170,6 +174,7 @@ export default function OracleTerminal({ locale }: Props) {
       received = await readOracleStream(response, (chunk) => {
         updateExchange(id, (exchange) => ({
           ...exchange,
+          state: 'streaming',
           segments: appendChunk(exchange.segments, chunk),
         }));
       });
@@ -238,7 +243,10 @@ export default function OracleTerminal({ locale }: Props) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open]);
 
-  const busy = useMemo(() => exchanges.some((exchange) => exchange.state === 'streaming'), [exchanges]);
+  const busy = useMemo(
+    () => exchanges.some((exchange) => exchange.state === 'preparing' || exchange.state === 'streaming'),
+    [exchanges],
+  );
 
   const submit = async () => {
     const trimmed = query.trim();
@@ -315,7 +323,7 @@ export default function OracleTerminal({ locale }: Props) {
                         changed, never the whole accumulated answer; `aria-busy` marks it in progress while streaming. */}
                     <div
                       className="oracle-answer" aria-live="polite" aria-atomic="false"
-                      aria-busy={exchange.state === 'streaming'}
+                      aria-busy={exchange.state === 'preparing' || exchange.state === 'streaming'}
                     >
                     {exchange.segments.map((segment) => (
                       <div
@@ -340,6 +348,9 @@ export default function OracleTerminal({ locale }: Props) {
                       </div>
                     ))}
                     </div>
+                    {/* Task 5: distinct from both idle and streaming, and never shown once a chunk (or an
+                        error) has settled the exchange into another state. */}
+                    {exchange.state === 'preparing' && <p className="oracle-status oracle-preparing" role="status">{copy.preparing}</p>}
                     {exchange.state === 'streaming' && <p className="oracle-status" role="status">{copy.streaming}</p>}
                     {exchange.notice && <p className="oracle-notice" role="status">{exchange.notice}</p>}
                     {exchange.state === 'complete' && exchange.segments.some((segment) => segment.mode === 'creative') && (
