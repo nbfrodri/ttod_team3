@@ -145,3 +145,37 @@ never leaves a stale alert sitting next to its own replacement.
 alert + Retry) and a 5xx answered by a live server (the "Unavailable" alert, no raw status code,
 nothing queued), plus a recovery test where Retry streams normally.
 
+# Unit and component tests (Team 3, Task 7)
+
+Brief: [`docs/public/_tasks/oracle-task7.md`](../../../../../docs/public/_tasks/oracle-task7.md).
+
+Run them exactly the way CI does:
+
+```bash
+npm --prefix services/frontend test      # or: cd services/frontend && npm test
+```
+
+`services/frontend/package.json` exposes `test` (`vitest run`, non-watch), and
+`.github/workflows/ci.yml` runs it between `check` and `build`, so the brief's
+"the tests pass in the CI pipeline" line is now something CI actually verifies rather than
+something a reviewer has to take on trust. The workflow's `name:` is deliberately **not**
+renamed: it is `main`'s required status check, and changing it would leave every PR blocked
+on a check that never reports (see the comment at the top of that file).
+
+## Which acceptance line each test proves
+
+| Brief criterion | Test |
+| --- | --- |
+| SSE sequence handled, `[DONE]` ignored | `sse.test.ts` → *parses a valid envelope and ignores the done sentinel* |
+| Chunks split across byte boundaries | `sse.test.ts` → *handles response chunks split across byte boundaries* |
+| A malformed envelope is an error, not a silent drop | `sse.test.ts` → *delivers earlier chunks before failing on a malformed envelope* |
+| A body-less response fails instead of resolving empty | `sse.test.ts` → *rejects a response with no body…* |
+| State updates incrementally, never buffered until close | `OracleTerminal.test.tsx` → *streamed rendering (Task 1)*, plus the malformed-envelope unit test above |
+| `aria-busy` / `aria-live` correct during and after streaming | `OracleTerminal.test.tsx` → *live-region announcement (Task 2)* |
+| A rejected status (4xx) never leaks a raw HTTP code, and is never queued | `OracleTerminal.test.tsx` → *test coverage (Task 7)* |
+| 5xx → "Unavailable" alert + Retry, nothing queued | `OracleTerminal.test.tsx` → *recovery/error state (Task 6)* |
+
+The brief's illustrative `{ type: 'start' | 'delta' | 'end' }` envelope does not exist in this
+codebase: the real contract is `OracleResponseChunk` (`mode` / `text` / `citedQuoteIds`) with
+`[DONE]` or the stream closing as the terminator, and `sse.ts` is frozen by Task 4's brief.
+These tests follow the real envelope rather than the illustrative one.

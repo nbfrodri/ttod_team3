@@ -316,3 +316,29 @@ describe('OracleTerminal recovery/error state (Task 6)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
+
+describe('OracleTerminal test coverage (Task 7)', () => {
+  afterEach(() => cleanup());
+  beforeEach(() => vi.clearAllMocks());
+
+  // The 5xx case belongs to Task 6's own brief (§5). What Task 7 adds is the *other* rejected
+  // status: a 4xx used to surface the raw `Oracle stream failed (400)` string in the DOM.
+  it('turns a rejected request into a human-readable notice, never a raw status code, and stays usable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"detail":"no"}', { status: 400 })));
+    render(<OracleTerminal locale="en" />);
+    fireEvent.change(screen.getByPlaceholderText(/practice question/), { target: { value: 'Bad request?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('The Oracle could not complete this answer. Please try again.');
+    // Neither the status code nor the internal error string may reach the DOM.
+    expect(screen.queryByText(/Oracle stream failed/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/400/)).not.toBeInTheDocument();
+    // A rejected request is not an offline situation: nothing is parked in the queue.
+    expect(queueMocks.enqueueOracleQuery).not.toHaveBeenCalled();
+    // The terminal is not stuck in `busy`: a new question re-enables the Ask button
+    // (it is otherwise disabled only because submitting cleared the textarea).
+    fireEvent.change(screen.getByPlaceholderText(/practice question/), { target: { value: 'Again?' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ask' })).not.toBeDisabled());
+  });
+});
