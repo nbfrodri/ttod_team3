@@ -115,6 +115,8 @@ describe('OracleTerminal streamed rendering (Task 1)', () => {
     send({ mode: 'grounded', citedQuoteIds: ['wis-001'], text: 'Water ' });
     expect(await screen.findByText('Water')).toBeVisible();
     expect(screen.getByText('Listening…')).toBeVisible();
+    // Incremental paint: the first chunk is on screen while the second has not been sent yet.
+    expect(screen.queryByText(/finds its way/)).not.toBeInTheDocument();
 
     fireEvent.change(input, { target: { value: 'Second question' } });
     expect(ask).toBeDisabled();
