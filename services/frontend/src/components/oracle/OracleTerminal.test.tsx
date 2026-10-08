@@ -341,4 +341,28 @@ describe('OracleTerminal recovery/error state (Task 6)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  // Retry meets the Task 5 offline shortcut: with the browser offline the failed card itself turns
+  // into the queued notice. No second card, no new request, and the alert and its button are gone.
+  it('queues the query in the same card when Retry is pressed while the browser is offline', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response('boom', { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<OracleTerminal locale="en" />);
+    fireEvent.change(screen.getByPlaceholderText(/practice question/), { target: { value: 'Offline retry?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    const retryButton = await screen.findByRole('button', { name: 'Retry' });
+
+    const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    try {
+      fireEvent.click(retryButton);
+      expect(await screen.findByText(/safely queued on this device/)).toBeVisible();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+      expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(queueMocks.enqueueOracleQuery).toHaveBeenCalledWith(expect.objectContaining({ query: 'Offline retry?' }));
+    } finally {
+      onLine.mockRestore();
+    }
+  });
 });
