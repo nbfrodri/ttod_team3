@@ -107,6 +107,9 @@ describe('OracleTerminal governance and URL context', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
     expect(await screen.findByText('Build an emergency fund before investing.')).toBeVisible();
     expect(screen.getByText('Diversify your portfolio to reduce risk.')).toBeVisible();
+    // Brief §5: each exchange carries its own heading, so a screen reader can tell turns apart.
+    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent))
+      .toEqual(['Exchange 1', 'Exchange 2']);
 
     const secondBody = JSON.parse(fetchMock.mock.calls[1][1].body);
     expect(secondBody.sessionHistory).toEqual(['Human: How should I invest my savings?', 'Oracle: Diversify your portfolio to reduce risk.']);
