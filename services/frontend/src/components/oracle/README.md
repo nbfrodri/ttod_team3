@@ -6,7 +6,8 @@ Brief: [`docs/public/_tasks/oracle-task1.md`](../../../../../docs/public/_tasks/
 ## Streaming state
 
 1. `submit()` builds an `OracleQueryPayload` and calls `sendPayload()`, which appends an
-   `Exchange` with `state: 'streaming'` and `POST`s to `/api/v1/oracle/stream`.
+   `Exchange` with `state: 'preparing'` and `POST`s to `/api/v1/oracle/stream`. The first chunk
+   moves it to `streaming` (see the Task 5 section).
 2. The response goes to `readOracleStream(response, onChunk)` from `sse.ts`, which splits the
    body on blank lines and validates each event with `parseSseEvent`. Both helpers are used
    unmodified (the parser is frozen).
@@ -20,7 +21,7 @@ a single render (no layout thrashing), and each later read paints on its own.
 
 ## Busy guard
 
-- `busy` is derived from state: any exchange still `streaming`. It disables the **Ask** button
+- `busy` is derived from state: any exchange still `preparing` or `streaming`. It disables the **Ask** button
   and makes `submit()` return early, so Ctrl/⌘+Enter and form submit are blocked too.
 - `submittingRef` also blocks a second submit fired before React re-renders, so only one stream
   per terminal writes to `exchanges` at a time.
@@ -51,7 +52,7 @@ Brief: [`docs/public/_tasks/oracle-task2.md`](../../../../../docs/public/_tasks/
 ## Where the live region lives
 
 Each exchange wraps its streamed segments in `div.oracle-answer` with `aria-live="polite"`,
-`aria-atomic="false"` and `aria-busy={exchange.state === 'streaming'}`. It is the only
+`aria-atomic="false"` and `aria-busy` set while the exchange is `preparing` or `streaming`. It is the only
 `aria-live` node in the terminal: `.oracle-log` used to be one, so the query echo, the "Listening…"
 status and the notices were announced together with the answer. The status indicator is now a
 sibling `role="status"` element outside the answer.
@@ -116,3 +117,26 @@ Then do the screen reader check described in the Task 2 section.
 segment and asserts by role and accessible name, not class names: each group is named by its
 mode, the grounded group has a "Citas" list whose links point to `/es/wisdom/{id}`, and the
 creative group has no links.
+
+# Cold-start preparing state (Team 3, Task 5)
+
+Brief: [`docs/public/_tasks/oracle-task5.md`](../../../../../docs/public/_tasks/oracle-task5.md).
+
+An exchange is `preparing` from the moment the request fires until the first chunk arrives, then
+`streaming`. The status is a text label ("Gathering wisdom…" / "Reuniendo sabiduría…") with
+`role="status"`, a sibling of the answer live region. We chose a label over a generic spinner
+because the terminal already says "Listening…" while streaming, and a spinner would not tell
+"the Oracle is thinking" apart from "something is downloading". The pulse is opacity only and is
+switched off under `prefers-reduced-motion`; the text stays.
+
+**When the request fails immediately (brief §3.5):**
+
+- If the browser already reports `navigator.onLine === false`, no request is made. The query goes
+  straight to the offline queue and the exchange never enters `preparing`.
+- Any other failure is only known after trying, because `navigator.onLine === true` does not prove
+  the Oracle is reachable. The exchange is `preparing` until `fetch` settles and then moves to
+  `queued` or `error`; it never stays in `preparing` after a failure.
+
+**Tests:** *cold-start preparing state (Task 5)* covers the open stream with no chunk yet
+(`role="status"`, Ask disabled), a `fetch` that rejects, and the already-offline case, where the
+label is checked synchronously after the click and `fetch` is never called.

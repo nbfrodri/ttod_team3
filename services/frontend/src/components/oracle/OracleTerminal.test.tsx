@@ -259,4 +259,25 @@ describe('OracleTerminal cold-start preparing state (Task 5)', () => {
     expect(await screen.findByText(/safely queued on this device/)).toBeVisible();
     expect(screen.queryByText('Gathering wisdom…')).not.toBeInTheDocument();
   });
+
+  // Brief §3.5: a browser that already knows it is offline never starts a request, so the
+  // preparing status must not render even once. The first check runs synchronously after the click.
+  it('queues without ever rendering the preparing status when the browser is already offline', async () => {
+    const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      render(<OracleTerminal locale="en" />);
+      fireEvent.change(screen.getByPlaceholderText(/practice question/), { target: { value: 'Already offline' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+      expect(screen.queryByText('Gathering wisdom…')).not.toBeInTheDocument();
+      expect(await screen.findByText(/safely queued on this device/)).toBeVisible();
+      expect(screen.queryByText('Gathering wisdom…')).not.toBeInTheDocument();
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(queueMocks.enqueueOracleQuery).toHaveBeenCalledWith(expect.objectContaining({ query: 'Already offline' }));
+    } finally {
+      onLine.mockRestore();
+    }
+  });
 });

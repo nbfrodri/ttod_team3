@@ -150,6 +150,17 @@ export default function OracleTerminal({ locale }: Props) {
 
   const sendPayload = useCallback(async (payload: OracleQueryPayload, queuedEntry?: OfflineLogEntry) => {
     const id = identifier();
+    // Task 5 §3.5: a browser that already knows it is offline fails before any request exists, so
+    // the query goes straight to the offline queue and the exchange never enters `preparing`.
+    // `navigator.onLine === true` proves nothing, so every other failure still surfaces after the attempt.
+    if (!queuedEntry && typeof navigator !== 'undefined' && !navigator.onLine) {
+      const queued = await enqueueOracleQuery(payload).then(() => true, () => false);
+      setExchanges((current) => [...current, {
+        id, query: payload.query, contextTag: payload.contextTag, segments: [],
+        state: queued ? 'queued' : 'error', notice: queued ? copy.queued : copy.queueError,
+      }]);
+      return false;
+    }
     // `preparing` covers the gap between the request firing and the first chunk arriving
     // (cold start or plain network latency) so the terminal never looks frozen (Task 5).
     setExchanges((current) => [...current, {
