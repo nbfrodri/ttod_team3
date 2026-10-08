@@ -67,7 +67,7 @@ const COPY = {
     proposed: 'Saved as a draft proposal. The current human acceptance path is not yet operational.',
     proposalError: 'The draft proposal could not be saved.', retryError: 'A queued query could not be retried yet.',
     context: 'Context tag', hint: 'Alt+Shift+O opens · Ctrl/⌘+Enter asks · Esc closes',
-    citations: 'Cited quotes', viewQuote: 'View quote',
+    citations: 'Cited quotes', viewQuote: 'View quote', exchange: 'Exchange',
   },
   es: {
     eyebrow: 'Oráculo local', title: 'Pregunta al Tao', open: 'Abrir oráculo', close: 'Cerrar oráculo',
@@ -80,7 +80,7 @@ const COPY = {
     proposed: 'Guardada como borrador de propuesta. La vía actual de aceptación humana aún no está operativa.',
     proposalError: 'No se pudo guardar el borrador.', retryError: 'Todavía no se pudo reintentar una consulta guardada.',
     context: 'Etiqueta de contexto', hint: 'Alt+Mayús+O abre · Ctrl/⌘+Intro pregunta · Esc cierra',
-    citations: 'Citas', viewQuote: 'Ver cita',
+    citations: 'Citas', viewQuote: 'Ver cita', exchange: 'Intercambio',
   },
 } as const;
 
@@ -302,8 +302,11 @@ export default function OracleTerminal({ locale }: Props) {
             <header><span>{copy.eyebrow}</span><h1>{copy.title}</h1></header>
             <div className="oracle-log">
               <AnimatePresence initial={false}>
-                {exchanges.map((exchange) => (
+                {exchanges.map((exchange, index) => (
                   <motion.article key={exchange.id} className="oracle-exchange" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }}>
+                    {/* Task 4: a visually hidden heading names each turn, so past exchanges can be reached
+                        and told apart by heading navigation. It sits outside the Task 2 live region. */}
+                    <h2 className="sr-only">{copy.exchange} {index + 1}</h2>
                     <p className="oracle-query"><strong>›</strong> {exchange.query}</p>
                     {exchange.contextTag && <p className="oracle-context">{copy.context}: <code>{exchange.contextTag}</code></p>}
                     {/* Task 2: only the streamed answer is a live region (not the whole log), so the query echo,
