@@ -1,6 +1,8 @@
-import { defineConfig } from 'vitest/config';
+/// <reference types="vitest/config" />
+import { getViteConfig } from 'astro/config';
 
-export default defineConfig({
+// getViteConfig so vitest can resolve `.astro` imports for container API tests.
+export default getViteConfig({
   test: {
     exclude: [
       'node_modules/**',

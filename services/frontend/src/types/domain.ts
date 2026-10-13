@@ -1,3 +1,18 @@
+export type SessionRole = 'student' | 'reviewer' | 'instructor';
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  roles: SessionRole[];
+}
+
+export interface AuthLoginResponse {
+  session_token: string;
+  token_type: 'Session';
+  expires_in: number;
+  user: AuthUser;
+}
+
 export interface WisdomEntry {
   id: string;
   section: string;
@@ -13,6 +28,12 @@ export interface WisdomEntry {
     license: string;
     holder?: string;
   };
+}
+
+export interface FavoriteEntry {
+  userId: string;
+  quoteId: string;
+  savedAt: string;
 }
 
 export interface GraphNode {
@@ -59,4 +80,6 @@ export interface OfflineLogEntry {
   kind: 'oracle-query' | 'error-report';
   payload: OracleQueryPayload | { errorLog: string };
   synced: boolean;
+  /** Assigned by IndexedDB when first saved; retained when marked synced. */
+  queueOrder?: number;
 }

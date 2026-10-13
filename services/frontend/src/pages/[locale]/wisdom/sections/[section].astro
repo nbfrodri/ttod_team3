@@ -1,10 +1,21 @@
 ---
 import Page from '../../../../layouts/Page.astro';
-import { fetchWisdom, isLocale, labels } from '../../../../content/wisdom';
+import Breadcrumbs from '../../../../components/Breadcrumbs.astro';
+import EmptyState from '../../../../components/EmptyState.astro';
+import { frequencies, isLocale, labels, loadWisdom } from '../../../../content/wisdom';
 import '../../../../styles/tokens.css';
 const locale = Astro.params.locale;
 if (!isLocale(locale)) return new Response(null, { status: 404 });
-const entries = (await fetchWisdom(locale)).filter((entry) => entry.section === Astro.params.section);
+const { entries: all, failed } = await loadWisdom(locale);
+const entries = all.filter((entry) => entry.section === Astro.params.section);
+const siblings = frequencies(all, 'section');
 const copy = labels[locale];
 ---
-<Page lang={locale} title={`${copy.sections}: ${Astro.params.section}`}><main class="ttod-shell"><nav class="ttod-nav"><a href={`/${locale}/wisdom/`}>← {copy.back}</a></nav><h1>{copy.sections}: {Astro.params.section}</h1>{entries.length === 0 ? <p class="ttod-empty">{copy.empty}</p> : <div class="ttod-grid">{entries.map((entry) => <article class="ttod-card"><blockquote>{entry.text}</blockquote><a href={`/${locale}/wisdom/${entry.id}/`}>{entry.id}</a><footer class="ttod-meta">{entry.rights.holder ?? 'Rubén Vega Balbás'} · {entry.rights.license}</footer></article>)}</div>}</main></Page>
+<Page lang={locale} title={`${copy.sections}: ${Astro.params.section}`}>
+  <main class="ttod-shell">
+    <Breadcrumbs locale={locale} items={[{ label: copy.wisdom, href: `/${locale}/wisdom/` }, { label: Astro.params.section ?? '' }]} />
+    <h1>{copy.sections}: {Astro.params.section}</h1>
+    <nav class="ttod-clusters" aria-label={copy.sections}>{siblings.map(([value, count]) => <a class="ttod-pill" href={`/${locale}/wisdom/sections/${value}/`} aria-current={value === Astro.params.section ? 'page' : undefined}>{value} ({count})</a>)}</nav>
+    {failed ? <EmptyState variant="error" title={copy.errorTitle} message={copy.errorMessage} /> : entries.length === 0 ? <EmptyState title={copy.noMatchesTitle} message={copy.noMatches} action={{ label: copy.back, href: `/${locale}/wisdom/` }} /> : <div class="ttod-grid">{entries.map((entry) => <article class="ttod-card"><blockquote>{entry.text}</blockquote><a href={`/${locale}/wisdom/${entry.id}/`}>{entry.id}</a><footer class="ttod-meta">{entry.rights.holder ?? 'Rubén Vega Balbás'} · {entry.rights.license}</footer></article>)}</div>}
+  </main>
+</Page>
